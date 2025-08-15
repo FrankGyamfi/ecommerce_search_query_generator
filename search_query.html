@@ -98,6 +98,7 @@
     .controls {
       display: flex; gap: 10px; flex-wrap: wrap;
       margin-top: 20px;
+      align-items: center; /* CHANGED: keep tooltip aligned nicely */
     }
     button {
       padding: 10px 18px;
@@ -147,6 +148,35 @@
       font-size: 12px;
       text-align: center;
     }
+
+    /* =========================
+       Tooltip styles (NEW)
+       ========================= */
+    /* CHANGED: Added a small green tooltip for "Copied!" */
+    .tooltip-wrap { /* CHANGED */
+      position: relative;
+      display: inline-block;
+    }
+    .tooltip-bubble { /* CHANGED */
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 8px);
+      transform: translateX(-50%) translateY(4px) scale(0.98);
+      background: #16a34a; /* green-600 */
+      color: #fff;
+      padding: 6px 10px;
+      font-size: 12px;
+      border-radius: 999px;
+      white-space: nowrap;
+      box-shadow: 0 6px 18px rgba(22,163,74,0.25);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease, transform .18s ease;
+    }
+    .tooltip-wrap.show .tooltip-bubble { /* CHANGED */
+      opacity: 1;
+      transform: translateX(-50%) translateY(0) scale(1);
+    }
   </style>
 </head>
 <body>
@@ -186,7 +216,13 @@
 
   <div class="controls">
     <button id="genBtn">Generate</button>
-    <button id="copyAll" class="secondary">Copy All</button>
+
+    <!-- CHANGED: wrap Copy All in tooltip container -->
+    <span class="tooltip-wrap" id="copyWrap"> <!-- CHANGED -->
+      <button id="copyAll" class="secondary">Copy All</button>
+      <span class="tooltip-bubble" id="copiedNote">Copied!</span>
+    </span> <!-- CHANGED -->
+
     <button id="csvBtn" class="secondary">Download CSV</button>
     <button id="clearBtn" class="ghost">Clear</button>
   </div>
@@ -209,7 +245,9 @@ const els = {
   clearBtn: document.getElementById('clearBtn'),
   outText: document.getElementById('outText'),
   count: document.getElementById('count'),
-  modeChip: document.getElementById('modeChip')
+  modeChip: document.getElementById('modeChip'),
+  copyWrap: document.getElementById('copyWrap'),          // CHANGED: tooltip wrapper
+  copiedNote: document.getElementById('copiedNote')       // CHANGED: tooltip bubble
 };
 
 const CATEGORY_SUFFIXES = {
@@ -319,6 +357,8 @@ function aggressiveExtras(name, category){
   return uniq([...out]);
 }
 
+let currentList = []; // CHANGED: ensure we reference this in Copy All
+
 function generateVariants(name, category, aggressive){
   let base = baseVariants(name, category);
   if(aggressive){
@@ -333,7 +373,8 @@ function render(list, aggressive){
     els.count.textContent='Total: 0';
     return;
   }
-  els.outText.textContent = list.join('\n');
+  currentList = list; // CHANGED: keep list for Copy All (comma-separated)
+  els.outText.textContent = list.join('\n'); // display remains newline-separated
   els.count.textContent = `Total: ${list.length} • Mode: ${aggressive? 'Aggressive':'Normal'} • Case-insensitive`;
   els.modeChip.textContent = aggressive? 'Aggressive':'Normal';
 }
@@ -347,10 +388,26 @@ els.genBtn.addEventListener('click', ()=>{
   const list = generateVariants(els.nameInput.value, els.category.value, aggressive);
   render(list, aggressive);
 });
+
+/* =========================
+   Copy All: comma-separated + tooltip
+   ========================= */
+// CHANGED: Copy All now copies comma-separated and shows green tooltip
 els.copyAll.addEventListener('click', async ()=>{
-  const ok = await copy(els.outText.textContent||'');
-  alert(ok? 'All variants copied to clipboard' : 'Copy failed — select and copy manually');
+  if(!currentList.length || (els.outText.textContent||'').includes('(no output yet)')){
+    alert('No variants to copy — generate first');
+    return;
+  }
+  const commaSeparated = currentList.join(', '); // CHANGED
+  const ok = await copy(commaSeparated);         // CHANGED
+  if(ok){
+    els.copyWrap.classList.add('show');          // CHANGED: show tooltip
+    setTimeout(()=> els.copyWrap.classList.remove('show'), 1500); // CHANGED: hide tooltip
+  }else{
+    alert('Copy failed — select and copy manually');
+  }
 });
+
 els.csvBtn.addEventListener('click', ()=>{
   const text = els.outText.textContent;
   if(!text || text.includes('(no output yet)')){
@@ -369,6 +426,7 @@ els.csvBtn.addEventListener('click', ()=>{
 els.clearBtn.addEventListener('click', ()=>{
   els.outText.textContent='(no output yet)';
   els.count.textContent='Total: 0';
+  currentList = []; // CHANGED: reset
 });
 els.nameInput.addEventListener('keydown', e=>{
   if(e.key==='Enter'){ e.preventDefault(); els.genBtn.click(); }
